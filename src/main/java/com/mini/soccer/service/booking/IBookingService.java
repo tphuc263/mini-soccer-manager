@@ -1,0 +1,24 @@
+package com.mini.soccer.service.booking;
+
+import com.mini.soccer.dto.request.BookingRequest;
+import com.mini.soccer.dto.request.CancelBookingRequest;
+import com.mini.soccer.dto.request.PaymentRequest;
+import com.mini.soccer.dto.response.AdminBookingDetailResponse;
+import com.mini.soccer.dto.response.AdminBookingSummaryResponse;
+import com.mini.soccer.dto.response.BookingResponse;
+import com.mini.soccer.dto.response.PaymentResponse;
+
+import java.util.List;
+
+public interface IBookingService {
+
+    BookingResponse createBooking(BookingRequest request);
+
+    BookingResponse cancelBooking(Long bookingId, CancelBookingRequest request);
+
+    PaymentResponse payForBooking(Long bookingId, PaymentRequest request, String clientIp);
+
+    List<AdminBookingSummaryResponse> getAdminBookings(String bookingCode);
+
+    AdminBookingDetailResponse getAdminBookingDetail(Long bookingId);
+}
