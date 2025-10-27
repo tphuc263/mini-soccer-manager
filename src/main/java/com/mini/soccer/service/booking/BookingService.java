@@ -22,6 +22,10 @@ import com.mini.soccer.repository.UserRepository;
 import com.mini.soccer.security.userdetails.AppUserDetails;
 import com.mini.soccer.service.payment.IVnPayService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -35,7 +39,6 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -192,16 +195,15 @@ public class BookingService implements IBookingService {
     }
 
     @Override
-    public List<AdminBookingSummaryResponse> getAdminBookings(String bookingCode) {
-        List<Booking> bookings;
+    public Page<AdminBookingSummaryResponse> getAdminBookings(String bookingCode, Pageable pageable) {
+        Pageable effectivePageable = ensureSort(pageable);
+        Page<Booking> bookings;
         if (bookingCode != null && !bookingCode.isBlank()) {
-            bookings = bookingRepository.findByBookingCodeContainingIgnoreCaseOrderByCreatedAtDesc(bookingCode.trim());
+            bookings = bookingRepository.findByBookingCodeContainingIgnoreCase(bookingCode.trim(), effectivePageable);
         } else {
-            bookings = bookingRepository.findAllByOrderByCreatedAtDesc();
+            bookings = bookingRepository.findAll(effectivePageable);
         }
-        return bookings.stream()
-                .map(this::toAdminBookingSummary)
-                .toList();
+        return bookings.map(this::toAdminBookingSummary);
     }
 
     @Override
@@ -210,6 +212,17 @@ public class BookingService implements IBookingService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Booking not found"));
         Payment payment = paymentRepository.findByBooking_BookingId(bookingId).orElse(null);
         return toAdminBookingDetail(booking, payment);
+    }
+
+    private Pageable ensureSort(Pageable pageable) {
+        if (pageable.getSort().isSorted()) {
+            return pageable;
+        }
+        return PageRequest.of(
+                pageable.getPageNumber(),
+                pageable.getPageSize(),
+                Sort.by(Sort.Direction.DESC, "createdAt")
+        );
     }
 
     private User getAuthenticatedUser() {

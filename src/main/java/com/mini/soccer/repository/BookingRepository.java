@@ -1,22 +1,21 @@
 package com.mini.soccer.repository;
 
-import com.mini.soccer.model.Booking;
 import com.mini.soccer.enums.BookingStatus;
+import com.mini.soccer.model.Booking;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
-import java.util.List;
 
 public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     boolean existsByBookingCode(String bookingCode);
 
-    List<Booking> findAllByOrderByCreatedAtDesc();
-
-    List<Booking> findByBookingCodeContainingIgnoreCaseOrderByCreatedAtDesc(String bookingCode);
+    Page<Booking> findByBookingCodeContainingIgnoreCase(String bookingCode, Pageable pageable);
 
     @Query("""
         select case when count(b) > 0 then true else false end

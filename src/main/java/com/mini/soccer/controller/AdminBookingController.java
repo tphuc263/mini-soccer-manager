@@ -5,14 +5,15 @@ import com.mini.soccer.dto.response.AdminBookingSummaryResponse;
 import com.mini.soccer.dto.response.ApiResponse;
 import com.mini.soccer.service.booking.IBookingService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("${api.prefix}/admin/bookings")
@@ -22,9 +23,10 @@ public class AdminBookingController {
     private final IBookingService bookingService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<AdminBookingSummaryResponse>>> getBookings(
-            @RequestParam(name = "bookingCode", required = false) String bookingCode) {
-        List<AdminBookingSummaryResponse> bookings = bookingService.getAdminBookings(bookingCode);
+    public ResponseEntity<ApiResponse<Page<AdminBookingSummaryResponse>>> getBookings(
+            @RequestParam(name = "bookingCode", required = false) String bookingCode,
+            @PageableDefault(size = 10) Pageable pageable) {
+        Page<AdminBookingSummaryResponse> bookings = bookingService.getAdminBookings(bookingCode, pageable);
         return ResponseEntity.ok(ApiResponse.success(bookings, "Retrieved bookings"));
     }
 
