@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.List;
 
 public interface BookingRepository extends JpaRepository<Booking, Long> {
 
@@ -29,4 +30,6 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
                                      @Param("activeStatuses") Collection<BookingStatus> activeStatuses,
                                      @Param("requestedStart") LocalDateTime requestedStart,
                                      @Param("requestedEnd") LocalDateTime requestedEnd);
+
+    List<Booking> findByUser_UserIdOrderByStartTimeDesc(Long userId);
 }

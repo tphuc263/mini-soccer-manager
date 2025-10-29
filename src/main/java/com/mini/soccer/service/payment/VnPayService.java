@@ -30,8 +30,22 @@ public class VnPayService implements IVnPayService {
                                    String clientIp) {
         validateConfig();
         Map<String, String> params = buildBaseParams(amount, orderInfo, transactionRef, clientIp);
+        params.put("vnp_SecureHashType", "HmacSHA512");
+
+        Map<String, String> signingParams = params.entrySet().stream()
+                .filter(entry -> entry.getKey() != null)
+                .filter(entry -> !"vnp_SecureHash".equalsIgnoreCase(entry.getKey()))
+                .filter(entry -> !"vnp_SecureHashType".equalsIgnoreCase(entry.getKey()))
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (existing, replacement) -> existing,
+                        TreeMap::new
+                ));
+
+        String hashData = toQueryString(signingParams);
+        String secureHash = hmacSHA512(properties.getHashSecret(), hashData);
         String queryString = toQueryString(params);
-        String secureHash = hmacSHA512(properties.getHashSecret(), queryString);
         return properties.getPayUrl() + "?" + queryString + "&vnp_SecureHash=" + secureHash;
     }
 
@@ -62,8 +76,8 @@ public class VnPayService implements IVnPayService {
             return false;
         }
 
-        String queryString = toQueryString(filtered);
-        String expectedHash = hmacSHA512(properties.getHashSecret(), queryString);
+        String hashData = toQueryString(filtered);
+        String expectedHash = hmacSHA512(properties.getHashSecret(), hashData);
         return expectedHash.equalsIgnoreCase(providedHash);
     }
 
@@ -91,7 +105,9 @@ public class VnPayService implements IVnPayService {
 
     private String toQueryString(Map<String, String> params) {
         return params.entrySet().stream()
-                .map(entry -> entry.getKey() + "=" + encode(entry.getValue()))
+                .filter(entry -> entry.getKey() != null && !entry.getKey().isBlank())
+                .filter(entry -> entry.getValue() != null && !entry.getValue().isBlank())
+                .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
                 .collect(Collectors.joining("&"));
     }
 

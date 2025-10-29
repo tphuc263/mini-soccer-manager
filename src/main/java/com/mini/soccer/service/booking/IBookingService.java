@@ -10,6 +10,8 @@ import com.mini.soccer.dto.response.PaymentResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.List;
+
 public interface IBookingService {
 
     BookingResponse createBooking(BookingRequest request);
@@ -21,4 +23,6 @@ public interface IBookingService {
     Page<AdminBookingSummaryResponse> getAdminBookings(String bookingCode, Pageable pageable);
 
     AdminBookingDetailResponse getAdminBookingDetail(Long bookingId);
+
+    List<BookingResponse> getCurrentUserBookings();
 }

@@ -39,6 +39,7 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -195,6 +196,15 @@ public class BookingService implements IBookingService {
     }
 
     @Override
+    public List<BookingResponse> getCurrentUserBookings() {
+        AppUserDetails principal = getCurrentUserDetails();
+        List<Booking> bookings = bookingRepository.findByUser_UserIdOrderByStartTimeDesc(principal.getUserId());
+        return bookings.stream()
+                .map(this::toBookingResponse)
+                .toList();
+    }
+
+    @Override
     public Page<AdminBookingSummaryResponse> getAdminBookings(String bookingCode, Pageable pageable) {
         Pageable effectivePageable = ensureSort(pageable);
         Page<Booking> bookings;
@@ -299,6 +309,7 @@ public class BookingService implements IBookingService {
                 .bookingId(booking.getBookingId())
                 .bookingCode(booking.getBookingCode())
                 .fieldId(booking.getField().getFieldId())
+                .fieldName(booking.getField().getName())
                 .startTime(booking.getStartTime())
                 .endTime(booking.getEndTime())
                 .pricePerHour(booking.getPriceAtBooking())

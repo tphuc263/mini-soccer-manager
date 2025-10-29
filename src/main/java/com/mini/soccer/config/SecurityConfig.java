@@ -67,6 +67,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/payments/vnpay/callback", "/api/v1/payments/vnpay/confirm").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(apiPrefix + "/auth/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, apiPrefix + "/fields/**").permitAll()
                         .requestMatchers(apiPrefix + "/admin/**").hasAuthority(UserRole.ADMIN.name())
                         .anyRequest().authenticated()
                 )

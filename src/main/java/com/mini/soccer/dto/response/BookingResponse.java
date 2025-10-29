@@ -12,6 +12,7 @@ public class BookingResponse {
     Long bookingId;
     String bookingCode;
     Long fieldId;
+    String fieldName;
     LocalDateTime startTime;
     LocalDateTime endTime;
     BigDecimal pricePerHour;

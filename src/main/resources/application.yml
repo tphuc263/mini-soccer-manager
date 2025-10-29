@@ -39,3 +39,7 @@ payment:
     currencyCode: ${VNPAY_CURRENCY_CODE:VND}
     locale: ${VNPAY_LOCALE:vn}
     orderType: ${VNPAY_ORDER_TYPE:other}
+
+frontend:
+  vnpay:
+    callback-url: ${FRONTEND_VNPAY_CALLBACK_URL:http://127.0.0.1:3000/payment/vnpay/callback}
