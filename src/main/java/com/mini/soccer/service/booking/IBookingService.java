@@ -3,6 +3,7 @@ package com.mini.soccer.service.booking;
 import com.mini.soccer.dto.request.BookingRequest;
 import com.mini.soccer.dto.request.CancelBookingRequest;
 import com.mini.soccer.dto.request.PaymentRequest;
+import com.mini.soccer.dto.request.UpdatePaymentStatusRequest;
 import com.mini.soccer.dto.response.AdminBookingDetailResponse;
 import com.mini.soccer.dto.response.AdminBookingSummaryResponse;
 import com.mini.soccer.dto.response.BookingResponse;
@@ -19,6 +20,8 @@ public interface IBookingService {
     BookingResponse cancelBooking(Long bookingId, CancelBookingRequest request);
 
     PaymentResponse payForBooking(Long bookingId, PaymentRequest request, String clientIp);
+
+    PaymentResponse updateBookingPaymentStatus(Long bookingId, UpdatePaymentStatusRequest request);
 
     Page<AdminBookingSummaryResponse> getAdminBookings(String bookingCode, Pageable pageable);
 

@@ -19,4 +19,7 @@ public class BookingResponse {
     BigDecimal totalAmount;
     String status;
     LocalDateTime createdAt;
+    LocalDateTime cancelledAt;
+    String cancellationReason;
+    PaymentResponse payment;
 }

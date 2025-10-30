@@ -42,4 +42,4 @@ payment:
 
 frontend:
   vnpay:
-    callback-url: ${FRONTEND_VNPAY_CALLBACK_URL:http://127.0.0.1:3000/payment/vnpay/callback}
+    callback-url: ${FRONTEND_VNPAY_CALLBACK_URL:http://localhost:3000/payment/vnpay/callback}

@@ -45,6 +45,11 @@ public class Booking {
     @Builder.Default
     private BookingStatus status = BookingStatus.PENDING;
 
+    @Column(length = 255)
+    private String cancellationReason;
+
+    private LocalDateTime cancelledAt;
+
     @Column(nullable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

@@ -3,6 +3,7 @@ package com.mini.soccer.service.booking;
 import com.mini.soccer.dto.request.BookingRequest;
 import com.mini.soccer.dto.request.CancelBookingRequest;
 import com.mini.soccer.dto.request.PaymentRequest;
+import com.mini.soccer.dto.request.UpdatePaymentStatusRequest;
 import com.mini.soccer.dto.response.AdminBookingDetailResponse;
 import com.mini.soccer.dto.response.AdminBookingSummaryResponse;
 import com.mini.soccer.dto.response.BookingResponse;
@@ -38,10 +39,13 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -94,7 +98,7 @@ public class BookingService implements IBookingService {
                 .build();
 
         Booking saved = bookingRepository.save(booking);
-        return toBookingResponse(saved);
+        return toBookingResponse(saved, null);
     }
 
     @Override
@@ -103,24 +107,39 @@ public class BookingService implements IBookingService {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Booking not found"));
 
-        ensureOwnershipOrAdmin(booking.getUser().getUserId());
+        AppUserDetails principal = getCurrentUserDetails();
+        ensureOwnershipOrAdmin(booking.getUser().getUserId(), principal);
 
         if (BookingStatus.CANCELLED.equals(booking.getStatus())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Booking has already been cancelled");
         }
+        if (!EnumSet.of(BookingStatus.CONFIRMED, BookingStatus.PENDING).contains(booking.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Booking cannot be cancelled in its current status");
+        }
+        if (!isAdmin(principal) && !booking.getStartTime().isAfter(LocalDateTime.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot cancel a booking that has already started");
+        }
 
         booking.setStatus(BookingStatus.CANCELLED);
+        booking.setCancellationReason(normalizeCancellationReason(request.getReason()));
+        booking.setCancelledAt(LocalDateTime.now());
         bookingRepository.save(booking);
 
-        paymentRepository.findByBooking_BookingId(bookingId).ifPresent(payment -> {
-            if (PaymentStatus.PAID.equals(payment.getStatus())) {
-                payment.setStatus(PaymentStatus.REFUNDED);
-                payment.setRefundedAt(LocalDateTime.now());
-                paymentRepository.save(payment);
-            }
-        });
+        Payment updatedPayment = paymentRepository.findByBooking_BookingId(bookingId)
+                .map(payment -> {
+                    if (PaymentStatus.PAID.equals(payment.getStatus())) {
+                        payment.setStatus(PaymentStatus.REFUND_PENDING);
+                        payment.setRefundedAt(null);
+                    } else if (PaymentStatus.REFUNDED.equals(payment.getStatus())) {
+                        payment.setRefundedAt(payment.getRefundedAt());
+                    } else if (PaymentStatus.REFUND_PENDING.equals(payment.getStatus())) {
+                        payment.setRefundedAt(null);
+                    }
+                    return paymentRepository.save(payment);
+                })
+                .orElse(null);
 
-        return toBookingResponse(booking);
+        return toBookingResponse(booking, updatedPayment);
     }
 
     @Override
@@ -179,8 +198,8 @@ public class BookingService implements IBookingService {
             target.setVnpTxnRef(transactionCode);
             target.setVnpOrderInfo(orderInfo);
         } else {
-            target.setStatus(PaymentStatus.PAID);
-            target.setPaidAt(LocalDateTime.now());
+            target.setStatus(PaymentStatus.PENDING);
+            target.setPaidAt(null);
             target.setVnpTxnRef(null);
             target.setVnpOrderInfo(null);
         }
@@ -196,11 +215,34 @@ public class BookingService implements IBookingService {
     }
 
     @Override
+    @Transactional
+    public PaymentResponse updateBookingPaymentStatus(Long bookingId, UpdatePaymentStatusRequest request) {
+        PaymentStatus targetStatus = request.getStatus();
+        if (targetStatus == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Target payment status is required");
+        }
+        AppUserDetails principal = getCurrentUserDetails();
+        ensureAdmin(principal);
+
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Booking not found"));
+
+        Payment payment = paymentRepository.findByBooking_BookingId(bookingId).orElse(null);
+        Payment updated = applyPaymentStatusUpdate(booking, payment, request);
+        Payment saved = paymentRepository.save(updated);
+        return toPaymentResponse(saved, null);
+    }
+
+    @Override
     public List<BookingResponse> getCurrentUserBookings() {
         AppUserDetails principal = getCurrentUserDetails();
         List<Booking> bookings = bookingRepository.findByUser_UserIdOrderByStartTimeDesc(principal.getUserId());
+        List<Long> bookingIds = bookings.stream()
+                .map(Booking::getBookingId)
+                .toList();
+        var payments = mapPaymentsByBookingId(bookingIds);
         return bookings.stream()
-                .map(this::toBookingResponse)
+                .map(booking -> toBookingResponse(booking, payments.get(booking.getBookingId())))
                 .toList();
     }
 
@@ -243,6 +285,10 @@ public class BookingService implements IBookingService {
 
     private void ensureOwnershipOrAdmin(Long ownerId) {
         AppUserDetails principal = getCurrentUserDetails();
+        ensureOwnershipOrAdmin(ownerId, principal);
+    }
+
+    private void ensureOwnershipOrAdmin(Long ownerId, AppUserDetails principal) {
         if (isAdmin(principal)) {
             return;
         }
@@ -267,6 +313,12 @@ public class BookingService implements IBookingService {
         return principal.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .anyMatch(role -> UserRole.ADMIN.name().equals(role));
+    }
+
+    private void ensureAdmin(AppUserDetails principal) {
+        if (!isAdmin(principal)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin privileges required");
+        }
     }
 
     private String normalizeClientIp(String clientIp) {
@@ -304,7 +356,7 @@ public class BookingService implements IBookingService {
         return "TX" + ThreadLocalRandom.current().nextInt(100000, 999999);
     }
 
-    private BookingResponse toBookingResponse(Booking booking) {
+    private BookingResponse toBookingResponse(Booking booking, Payment payment) {
         return BookingResponse.builder()
                 .bookingId(booking.getBookingId())
                 .bookingCode(booking.getBookingCode())
@@ -316,6 +368,9 @@ public class BookingService implements IBookingService {
                 .totalAmount(booking.getTotalAmount())
                 .status(booking.getStatus().name())
                 .createdAt(booking.getCreatedAt())
+                .cancelledAt(booking.getCancelledAt())
+                .cancellationReason(booking.getCancellationReason())
+                .payment(payment != null ? toPaymentResponse(payment, null) : null)
                 .build();
     }
 
@@ -350,6 +405,8 @@ public class BookingService implements IBookingService {
                 .userPhoneNumber(booking.getUser().getPhoneNumber())
                 .fieldId(booking.getField().getFieldId())
                 .fieldName(booking.getField().getName())
+                .cancelledAt(booking.getCancelledAt())
+                .cancellationReason(booking.getCancellationReason())
                 .build();
     }
 
@@ -370,6 +427,94 @@ public class BookingService implements IBookingService {
                 .fieldName(booking.getField().getName())
                 .fieldDescription(booking.getField().getDescription())
                 .payment(payment != null ? toPaymentResponse(payment, null) : null)
+                .cancelledAt(booking.getCancelledAt())
+                .cancellationReason(booking.getCancellationReason())
                 .build();
+    }
+
+    private Map<Long, Payment> mapPaymentsByBookingId(List<Long> bookingIds) {
+        if (bookingIds == null || bookingIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<Payment> payments = paymentRepository.findByBooking_BookingIdIn(bookingIds);
+        return payments.stream()
+                .collect(Collectors.toMap(
+                        payment -> payment.getBooking().getBookingId(),
+                        payment -> payment,
+                        (existing, replacement) -> replacement
+                ));
+    }
+
+    private Payment applyPaymentStatusUpdate(Booking booking, Payment payment, UpdatePaymentStatusRequest request) {
+        PaymentStatus target = request.getStatus();
+        return switch (target) {
+            case PENDING -> {
+                Payment codPending = ensurePaymentEntity(payment, booking, request.getPaymentMethod());
+                codPending.setStatus(PaymentStatus.PENDING);
+                codPending.setPaidAt(null);
+                codPending.setRefundedAt(null);
+                yield codPending;
+            }
+            case PAID -> {
+                Payment paidPayment = ensurePaymentEntity(payment, booking, request.getPaymentMethod());
+                paidPayment.setStatus(PaymentStatus.PAID);
+                if (paidPayment.getPaidAt() == null) {
+                    paidPayment.setPaidAt(LocalDateTime.now());
+                }
+                paidPayment.setRefundedAt(null);
+                yield paidPayment;
+            }
+            case REFUND_PENDING -> {
+                Payment refundPending = requireExistingPayment(payment);
+                refundPending.setStatus(PaymentStatus.REFUND_PENDING);
+                refundPending.setRefundedAt(null);
+                yield refundPending;
+            }
+            case REFUNDED -> {
+                Payment refunded = requireExistingPayment(payment);
+                refunded.setStatus(PaymentStatus.REFUNDED);
+                if (refunded.getRefundedAt() == null) {
+                    refunded.setRefundedAt(LocalDateTime.now());
+                }
+                yield refunded;
+            }
+        };
+    }
+
+    private Payment ensurePaymentEntity(Payment existing, Booking booking, PaymentMethod overrideMethod) {
+        if (existing != null) {
+            if (overrideMethod != null) {
+                existing.setPaymentMethod(overrideMethod);
+            }
+            return existing;
+        }
+        Payment payment = new Payment();
+        payment.setBooking(booking);
+        payment.setAmount(booking.getTotalAmount());
+        payment.setPaymentMethod(overrideMethod != null ? overrideMethod : PaymentMethod.COD);
+        String transactionCode = generateTransactionCode();
+        while (paymentRepository.existsByTransactionCode(transactionCode)) {
+            transactionCode = generateTransactionCode();
+        }
+        payment.setTransactionCode(transactionCode);
+        payment.setVnpTxnRef(null);
+        payment.setVnpOrderInfo(null);
+        payment.setVnpResponseCode(null);
+        return payment;
+    }
+
+    private Payment requireExistingPayment(Payment payment) {
+        if (payment == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Payment record not found for booking");
+        }
+        return payment;
+    }
+
+    private String normalizeCancellationReason(String reason) {
+        if (reason == null) {
+            return null;
+        }
+        String trimmed = reason.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

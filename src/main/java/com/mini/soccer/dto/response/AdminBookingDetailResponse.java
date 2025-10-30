@@ -24,4 +24,6 @@ public class AdminBookingDetailResponse {
     String fieldName;
     String fieldDescription;
     PaymentResponse payment;
+    LocalDateTime cancelledAt;
+    String cancellationReason;
 }

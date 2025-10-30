@@ -21,4 +21,6 @@ public class AdminBookingSummaryResponse {
     String userPhoneNumber;
     Long fieldId;
     String fieldName;
+    LocalDateTime cancelledAt;
+    String cancellationReason;
 }
